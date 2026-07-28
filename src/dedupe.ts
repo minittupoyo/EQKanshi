@@ -4,25 +4,47 @@ import { WolfxEEWPayload, P2PQuake551Payload } from './types.js';
  * Wolfx EEW Deduplication & Validity Checker
  */
 export class WolfxDeduper {
-  private processedEvents: Map<string, { lastSerial: number; isCancelled: boolean; firstAlertSent: boolean; firstNoteId?: string; lastSeenAt: number }> = new Map();
+  private processedEvents: Map<string, {
+    lastSerial: number;
+    isCancelled: boolean;
+    firstAlertSent: boolean;
+    firstNoteId?: string;
+    lastSentMaxIntensity?: string;
+    lastSentMagnitude?: number;
+    lastSeenAt: number;
+  }> = new Map();
   private maxCacheSize = 500;
   private cacheTtlMs = 24 * 60 * 60 * 1000; // 24 hours
 
-  public recordNoteId(eventId: string, noteId: string): void {
+  public recordSentNote(eventId: string, noteId: string, payload?: WolfxEEWPayload): void {
     const entry = this.processedEvents.get(eventId);
+    const rawMag = payload ? (payload.Magunitude ?? payload.Magnitude) : undefined;
+    const magNum = typeof rawMag === 'number' ? rawMag : typeof rawMag === 'string' ? parseFloat(rawMag) : undefined;
+
     if (entry) {
-      if (!entry.firstNoteId) {
+      if (!entry.firstNoteId && noteId) {
         entry.firstNoteId = noteId;
+      }
+      if (payload) {
+        if (payload.MaxIntensity) entry.lastSentMaxIntensity = payload.MaxIntensity.trim();
+        if (magNum !== undefined && !isNaN(magNum)) entry.lastSentMagnitude = magNum;
       }
     } else {
       this.processedEvents.set(eventId, {
-        lastSerial: 0,
-        isCancelled: false,
+        lastSerial: payload?.Serial ? Number(payload.Serial) : 0,
+        isCancelled: Boolean(payload?.isCancel),
         firstAlertSent: true,
         firstNoteId: noteId,
+        lastSentMaxIntensity: payload?.MaxIntensity?.trim(),
+        lastSentMagnitude: magNum && !isNaN(magNum) ? magNum : undefined,
         lastSeenAt: Date.now(),
       });
     }
+  }
+
+  // Backwards-compatibility helper
+  public recordNoteId(eventId: string, noteId: string): void {
+    this.recordSentNote(eventId, noteId);
   }
 
   public getFirstNoteId(eventId: string): string | undefined {
@@ -79,7 +101,26 @@ export class WolfxDeduper {
     const prev = this.processedEvents.get(eventId);
     const firstAlertSent = prev?.firstAlertSent ?? false;
 
-    // 6. First & Final report filter (with MaxIntensity check)
+    // Check if MaxIntensity or Magnitude changed since last sent alert
+    const currentMagRaw = data.Magunitude ?? data.Magnitude;
+    const currentMag = typeof currentMagRaw === 'number' ? currentMagRaw : typeof currentMagRaw === 'string' ? parseFloat(currentMagRaw) : undefined;
+    const currentIntensity = data.MaxIntensity?.trim();
+
+    let hasChanged = false;
+    if (firstAlertSent && prev) {
+      const intensityChanged = Boolean(currentIntensity && prev.lastSentMaxIntensity && currentIntensity !== prev.lastSentMaxIntensity);
+      const magChanged = Boolean(
+        currentMag !== undefined &&
+        !isNaN(currentMag) &&
+        prev.lastSentMagnitude !== undefined &&
+        Math.abs(currentMag - prev.lastSentMagnitude) >= 0.05
+      );
+      if (intensityChanged || magChanged) {
+        hasChanged = true;
+      }
+    }
+
+    // 6. First, Final & Change report filter
     const onlyFirstAndFinal = process.env.ONLY_FIRST_AND_FINAL !== 'false'; // Default true
     if (onlyFirstAndFinal && !isCancel) {
       const hasIntensity = this.hasValidMaxIntensity(data.MaxIntensity);
@@ -88,8 +129,8 @@ export class WolfxDeduper {
         if (!hasIntensity) {
           return { valid: false, reason: `Initial report skipped: MaxIntensity not available yet (Serial: ${currentSerial})`, data };
         }
-      } else if (!isFinal) {
-        return { valid: false, reason: `Intermediate report skipped (Serial: ${currentSerial}, isFinal: false)`, data };
+      } else if (!isFinal && !hasChanged) {
+        return { valid: false, reason: `Intermediate report skipped: No change in MaxIntensity or Magnitude (Serial: ${currentSerial}, isFinal: false)`, data };
       }
     }
 
@@ -98,7 +139,7 @@ export class WolfxDeduper {
         if (prev.isCancelled) {
           return { valid: false, reason: 'Duplicate cancellation report for event', data };
         }
-      } else if (currentSerial > 0 && currentSerial <= prev.lastSerial && !isFinal) {
+      } else if (currentSerial > 0 && currentSerial <= prev.lastSerial && !isFinal && !hasChanged) {
         return { valid: false, reason: `Outdated or duplicate serial (${currentSerial} <= ${prev.lastSerial})`, data };
       }
     }
@@ -110,6 +151,8 @@ export class WolfxDeduper {
       isCancelled: isCancel || (prev?.isCancelled ?? false),
       firstAlertSent: firstAlertSent || sendingFirstAlert,
       firstNoteId: prev?.firstNoteId,
+      lastSentMaxIntensity: hasChanged || sendingFirstAlert ? currentIntensity || prev?.lastSentMaxIntensity : prev?.lastSentMaxIntensity,
+      lastSentMagnitude: hasChanged || sendingFirstAlert ? (currentMag && !isNaN(currentMag) ? currentMag : prev?.lastSentMagnitude) : prev?.lastSentMagnitude,
       lastSeenAt: now,
     });
 

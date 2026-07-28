@@ -77,12 +77,14 @@ export class WolfxEEWClient {
 
         const eventId = data!.EventID || '';
         const isFinal = Boolean(data!.isFinal);
-        const renoteId = isFinal ? this.deduper.getFirstNoteId(eventId) : undefined;
+        const renoteId = this.deduper.getFirstNoteId(eventId);
 
-        if (renoteId) {
+        if (isFinal && renoteId) {
           console.log(` ${ansi.dim}└─>${ansi.reset} ${ansi.bold}${ansi.green}[Posting Final Alert (Quote-Renote)]${ansi.reset} EventID: ${eventId}, RenoteTargetID: ${renoteId}`);
+        } else if (renoteId) {
+          console.log(` ${ansi.dim}└─>${ansi.reset} ${ansi.bold}${ansi.green}[Posting Updated Alert (Quote-Renote)]${ansi.reset} EventID: ${eventId}, Serial: ${data!.Serial}, RenoteTargetID: ${renoteId}`);
         } else {
-          console.log(` ${ansi.dim}└─>${ansi.reset} ${ansi.bold}${ansi.green}[Posting to Misskey]${ansi.reset} EventID: ${eventId}, Serial: ${data!.Serial}`);
+          console.log(` ${ansi.dim}└─>${ansi.reset} ${ansi.bold}${ansi.green}[Posting Initial Alert]${ansi.reset} EventID: ${eventId}, Serial: ${data!.Serial}`);
         }
 
         const noteText = formatWolfxEEW(data!);
@@ -90,7 +92,7 @@ export class WolfxEEWClient {
 
         const postedNoteId = await postToMisskey(noteText, cw, renoteId);
         if (postedNoteId && eventId) {
-          this.deduper.recordNoteId(eventId, postedNoteId);
+          this.deduper.recordSentNote(eventId, postedNoteId, data!);
         }
       } catch (err) {
         console.error(`${ansi.red}[Wolfx EEW Message Error] Failed to parse or process payload:${ansi.reset}`, err);

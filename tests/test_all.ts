@@ -38,28 +38,54 @@ const reportWithIntensity = {
   ...reportNoIntensity,
   Serial: 2,
   MaxIntensity: '3',
+  Magunitude: 3.8,
 };
 const resDeferred2 = wolfxDeferred.checkAndValidate(reportWithIntensity);
 assert(resDeferred2.valid && resDeferred2.data?.Serial === 2, '2nd report with MaxIntensity accepted as initial alert');
+wolfxDeferred.recordSentNote('20260728180000', 'note_id_123456', reportWithIntensity as any);
 
-// 3rd report (intermediate after initial alert) -> skipped
-const reportIntermediate = {
+// 3rd report with SAME intensity & magnitude -> skipped
+const reportNoChange = {
   ...reportNoIntensity,
   Serial: 3,
   MaxIntensity: '3',
+  Magunitude: 3.8,
 };
-const resDeferred3 = wolfxDeferred.checkAndValidate(reportIntermediate);
-assert(!resDeferred3.valid && resDeferred3.reason?.includes('Intermediate report skipped'), '3rd report (intermediate) skipped');
+const resDeferred3 = wolfxDeferred.checkAndValidate(reportNoChange);
+assert(!resDeferred3.valid && resDeferred3.reason?.includes('No change in MaxIntensity or Magnitude'), '3rd report with no change skipped');
 
-// 4th report (final) -> accepted as final alert!
-const reportFinal = {
+// 4th report with CHANGED MaxIntensity (3 -> 4) -> accepted as intermediate update!
+const reportIntensityChanged = {
   ...reportNoIntensity,
   Serial: 4,
-  MaxIntensity: '3',
+  MaxIntensity: '4',
+  Magunitude: 3.8,
+};
+const resDeferredChange = wolfxDeferred.checkAndValidate(reportIntensityChanged);
+assert(resDeferredChange.valid && resDeferredChange.data?.Serial === 4, '4th report with changed MaxIntensity (3 -> 4) accepted');
+wolfxDeferred.recordSentNote('20260728180000', 'note_id_123456', reportIntensityChanged as any);
+
+// 5th report with CHANGED Magnitude (3.8 -> 4.5) -> accepted as intermediate update!
+const reportMagChanged = {
+  ...reportNoIntensity,
+  Serial: 5,
+  MaxIntensity: '4',
+  Magunitude: 4.5,
+};
+const resDeferredMagChange = wolfxDeferred.checkAndValidate(reportMagChanged);
+assert(resDeferredMagChange.valid && resDeferredMagChange.data?.Serial === 5, '5th report with changed Magnitude (3.8 -> 4.5) accepted');
+wolfxDeferred.recordSentNote('20260728180000', 'note_id_123456', reportMagChanged as any);
+
+// 6th report (final) -> accepted as final alert!
+const reportFinal = {
+  ...reportNoIntensity,
+  Serial: 6,
+  MaxIntensity: '4',
+  Magunitude: 4.5,
   isFinal: true,
 };
-const resDeferred4 = wolfxDeferred.checkAndValidate(reportFinal);
-assert(resDeferred4.valid && resDeferred4.data?.isFinal === true, '4th report accepted as final alert');
+const resDeferred6 = wolfxDeferred.checkAndValidate(reportFinal);
+assert(resDeferred6.valid && resDeferred6.data?.isFinal === true, '6th report accepted as final alert');
 
 // Test noteId recording & retrieval for renoteId
 wolfxDeferred.recordNoteId('20260728180000', 'note_id_123456');
