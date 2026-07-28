@@ -85,6 +85,26 @@ npm run build
 node dist/index.js
 ```
 
+### 🐳 Docker / Docker Compose で起動
+
+#### Docker Compose を使う場合 (推奨)
+```bash
+# ビルドと起動 (バックグラウンド)
+docker compose up -d --build
+
+# ログの確認
+docker compose logs -f
+
+# 停止
+docker compose down
+```
+
+#### Docker 単体で使う場合
+```bash
+docker build -t eqkanshi .
+docker run -d --name eqkanshi --env-file .env eqkanshi
+```
+
 ---
 
 ## 📁 ディレクトリ構造

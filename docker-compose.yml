@@ -1,0 +1,11 @@
+services:
+  eqkanshi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eqkanshi
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
