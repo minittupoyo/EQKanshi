@@ -1,6 +1,7 @@
 import { validateConfig, config } from './config.js';
 import { WolfxEEWClient } from './wolfx.js';
 import { P2PQuakeClient } from './p2p.js';
+import { startHealthMonitor } from './health.js';
 
 console.log('=== Earthquake Notification Bot for Misskey ===');
 validateConfig();
@@ -17,11 +18,25 @@ const p2pClient = new P2PQuakeClient();
 wolfxClient.start();
 p2pClient.start();
 
-function handleShutdown(signal: string) {
+let shuttingDown = false;
+const healthMonitor = startHealthMonitor(
+  config.healthPort,
+  [
+    { name: 'wolfx', isHealthy: () => wolfxClient.isHealthy() },
+    { name: 'p2p', isHealthy: () => p2pClient.isHealthy() },
+  ],
+  config.unhealthyRestartAfterMs,
+  () => handleShutdown('health watchdog', 1),
+);
+
+function handleShutdown(signal: string, exitCode = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+  healthMonitor.stop();
   wolfxClient.stop();
   p2pClient.stop();
-  process.exit(0);
+  process.exit(exitCode);
 }
 
 process.on('SIGINT', () => handleShutdown('SIGINT'));

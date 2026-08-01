@@ -12,6 +12,8 @@ export interface AppConfig {
   allowTraining: boolean;
   onlyFirstAndFinal: boolean;
   reconnectIntervalMs: number;
+  healthPort: number;
+  unhealthyRestartAfterMs: number;
 }
 
 function normalizeUrl(url: string): string {
@@ -27,10 +29,20 @@ export const config: AppConfig = {
   allowTraining: process.env.ALLOW_TRAINING === 'true',
   onlyFirstAndFinal: process.env.ONLY_FIRST_AND_FINAL !== 'false', // Default true
   reconnectIntervalMs: parseInt(process.env.RECONNECT_INTERVAL_MS || '5000', 10),
+  healthPort: parseInt(process.env.HEALTH_PORT || '3000', 10),
+  unhealthyRestartAfterMs: parseInt(process.env.UNHEALTHY_RESTART_AFTER_MS || '120000', 10),
 };
 
 export function validateConfig(): void {
   if (!config.misskeyToken) {
     console.warn('[Config Warning] MISSKEY_TOKEN is not set in environment or .env file. Posts will fail unless token is provided.');
+  }
+
+  if (!Number.isInteger(config.healthPort) || config.healthPort < 1 || config.healthPort > 65535) {
+    throw new Error('HEALTH_PORT must be an integer between 1 and 65535.');
+  }
+
+  if (!Number.isFinite(config.unhealthyRestartAfterMs) || config.unhealthyRestartAfterMs < 10000) {
+    throw new Error('UNHEALTHY_RESTART_AFTER_MS must be at least 10000.');
   }
 }

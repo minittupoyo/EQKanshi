@@ -28,6 +28,8 @@ Wolfxの緊急地震速報API（WebSocket）および P2P地震情報のWebSocke
 
 4. **堅牢なWebSocket接続管理**
    - 切断時の自動再接続機能（デフォルト 5秒間隔）。
+   - `/healthz` で Wolfx / P2P 両方の接続状態を監視。
+   - 接続異常が継続した場合はプロセスを終了し、Docker Compose が自動再起動。
 
 ---
 
@@ -62,6 +64,8 @@ P2P_WS_URL=wss://api.p2pquake.net/v2/ws
 # オプション設定
 ALLOW_TRAINING=false
 RECONNECT_INTERVAL_MS=5000
+HEALTH_PORT=3000
+UNHEALTHY_RESTART_AFTER_MS=120000
 ```
 
 ### 3. テストの実行
@@ -95,6 +99,9 @@ docker compose up -d --build
 # ログの確認
 docker compose logs -f
 
+# ヘルス状態の確認
+docker compose ps
+
 # 停止
 docker compose down
 ```
@@ -104,6 +111,10 @@ docker compose down
 docker build -t eqkanshi .
 docker run -d --name eqkanshi --env-file .env eqkanshi
 ```
+
+Compose のヘルスチェックは30秒間隔で `/healthz` を確認します。Wolfx または P2P の
+接続異常が `UNHEALTHY_RESTART_AFTER_MS`（デフォルト120秒）継続すると、アプリが
+終了コード1で停止し、`restart: unless-stopped` によりコンテナが再起動します。
 
 ---
 

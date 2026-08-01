@@ -28,6 +28,10 @@ export class WolfxEEWClient {
     }
   }
 
+  public isHealthy(): boolean {
+    return !this.isStopped && this.ws?.readyState === WebSocket.OPEN;
+  }
+
   private connect(): void {
     if (this.isStopped) return;
 
